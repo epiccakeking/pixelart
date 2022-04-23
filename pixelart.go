@@ -18,7 +18,6 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"io"
-	"os"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -72,6 +71,10 @@ func NewImageBuffer(im *image.RGBA, cursorColor *color.RGBA) ImageBuffer {
 		ScaleMode: canvas.ImageScalePixels,
 		FillMode:  canvas.ImageFillContain,
 	}
+	myCanvas.SetMinSize(fyne.Size{
+		Width:  float32(bounds.Dx()),
+		Height: float32(bounds.Dy()),
+	})
 	return ImageBuffer{im, overlayImage, &myCanvas, &overlay, container.New(layout.NewMaxLayout(), &myCanvas, &overlay), cursorColor, bounds.Min}
 }
 
@@ -131,15 +134,18 @@ func openWindow(state *appState, imBuf *ImageBuffer) {
 			picker.Show()
 		case "O":
 			dialog.NewFileOpen(func(closer fyne.URIReadCloser, err error) {
-				if err != nil {
+				if err != nil || closer == nil {
 					return
 				}
 				defer closer.Close()
-				loadReader(state, closer)
+				err = loadReader(state, closer)
+				if err != nil {
+					dialog.ShowError(err, w)
+				}
 			}, w).Show()
 		case "S":
 			dialog.NewFileSave(func(closer fyne.URIWriteCloser, err error) {
-				if err != nil {
+				if err != nil || closer == nil {
 					return
 				}
 				defer closer.Close()
@@ -153,11 +159,11 @@ func openWindow(state *appState, imBuf *ImageBuffer) {
 	w.Show()
 }
 
-func loadReader(state *appState, f io.Reader) {
+func loadReader(state *appState, f io.Reader) error {
 	// Load the image
 	m, _, err := image.Decode(f)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	// Image needs to be converted to RGBA
 	bounds := m.Bounds()
@@ -168,28 +174,7 @@ func loadReader(state *appState, f io.Reader) {
 	imBuf := NewImageBuffer(converted, &state.currentColor)
 
 	openWindow(state, &imBuf)
-}
-
-func openFile(state *appState, name string) {
-	// Load the image
-	f, err := os.Open(name)
-	if err != nil {
-		panic(err)
-	}
-	m, _, err := image.Decode(f)
-	f.Close()
-	if err != nil {
-		panic(err)
-	}
-	// Image needs to be converted to RGBA
-	bounds := m.Bounds()
-	converted := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
-	draw.Draw(converted, converted.Bounds(), m, bounds.Min, draw.Src)
-
-	// Create buffer
-	imBuf := NewImageBuffer(converted, &state.currentColor)
-
-	go openWindow(state, &imBuf)
+	return nil
 }
 
 func main() {

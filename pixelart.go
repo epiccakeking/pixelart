@@ -28,11 +28,11 @@ import (
 )
 
 type ImageBuffer struct {
+	*fyne.Container
 	Canvas        *image.RGBA
 	Overlay       *image.RGBA
 	canvasWidget  *canvas.Image
 	overlayWidget *canvas.Image
-	Widget        *fyne.Container
 	CursorColor   *color.RGBA
 	CursorPos     image.Point
 }
@@ -53,29 +53,38 @@ func (i ImageBuffer) DrawCursor() {
 	}
 	i.Overlay.Set(i.CursorPos.X*3, i.CursorPos.Y*3, c)
 	i.Overlay.Set(i.CursorPos.X*3+1, i.CursorPos.Y*3+1, i.CursorColor)
-	i.Widget.Refresh()
+	i.Refresh()
 }
 
-func NewImageBuffer(im *image.RGBA, cursorColor *color.RGBA) ImageBuffer {
+func NewImageBuffer(im *image.RGBA, cursorColor *color.RGBA) *ImageBuffer {
+
 	bounds := im.Bounds()
 	overlayImage := image.NewRGBA(image.Rect(0, 0, bounds.Dx()*3, bounds.Dy()*3))
-	overlay := canvas.Image{
-		Image:     overlayImage,
-		ScaleMode: canvas.ImageScalePixels,
-		FillMode:  canvas.ImageFillContain,
-	}
-
-	// Display
-	myCanvas := canvas.Image{
+	canvasWidget := &canvas.Image{
 		Image:     im,
 		ScaleMode: canvas.ImageScalePixels,
 		FillMode:  canvas.ImageFillContain,
 	}
-	myCanvas.SetMinSize(fyne.Size{
+	overlayWidget := &canvas.Image{
+		Image:     overlayImage,
+		ScaleMode: canvas.ImageScalePixels,
+		FillMode:  canvas.ImageFillContain,
+	}
+	// Display
+	c := &ImageBuffer{
+		Container:     container.New(layout.NewMaxLayout(), canvasWidget, overlayWidget),
+		Canvas:        im,
+		Overlay:       overlayImage,
+		canvasWidget:  canvasWidget,
+		overlayWidget: overlayWidget,
+		CursorColor:   cursorColor,
+		CursorPos:     bounds.Min,
+	}
+	canvasWidget.SetMinSize(fyne.Size{
 		Width:  float32(bounds.Dx()),
 		Height: float32(bounds.Dy()),
 	})
-	return ImageBuffer{im, overlayImage, &myCanvas, &overlay, container.New(layout.NewMaxLayout(), &myCanvas, &overlay), cursorColor, bounds.Min}
+	return c
 }
 
 type appState struct {
@@ -98,7 +107,7 @@ func openWindow(state *appState, imBuf *ImageBuffer) {
 	})
 	state.buffers[imBuf] = true
 	imBuf.DrawCursor()
-	w.SetContent(imBuf.Widget)
+	w.SetContent(imBuf.Container)
 	w.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
 		switch e.Name {
 		case "Up":
@@ -123,7 +132,7 @@ func openWindow(state *appState, imBuf *ImageBuffer) {
 		case "Space":
 			imBuf.Canvas.Set(imBuf.CursorPos.X, imBuf.CursorPos.Y, state.currentColor)
 			imBuf.DrawCursor()
-			imBuf.Widget.Refresh()
+			imBuf.Refresh()
 		case "C":
 			picker := dialog.NewColorPicker("Color picker", "", func(c color.Color) {
 				r, g, b, a := c.RGBA()
@@ -153,7 +162,7 @@ func openWindow(state *appState, imBuf *ImageBuffer) {
 			}, w).Show()
 		case "N":
 			buf := NewImageBuffer(image.NewRGBA(image.Rect(0, 0, 50, 50)), &state.currentColor)
-			openWindow(state, &buf)
+			openWindow(state, buf)
 		}
 	})
 	w.Show()
@@ -173,7 +182,7 @@ func loadReader(state *appState, f io.Reader) error {
 	// Create buffer
 	imBuf := NewImageBuffer(converted, &state.currentColor)
 
-	openWindow(state, &imBuf)
+	openWindow(state, imBuf)
 	return nil
 }
 
